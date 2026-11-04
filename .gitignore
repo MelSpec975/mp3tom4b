@@ -1,0 +1,9 @@
+# Audio and output files -- never commit audiobooks
+*.mp3
+*.m4b
+*.m4a
+*.jpg
+*.png
+# Python
+__pycache__/
+*.pyc
