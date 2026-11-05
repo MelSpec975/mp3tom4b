@@ -2,7 +2,7 @@
 Type=Application
 Name=MP3 to M4B
 GenericName=Audiobook Converter
-Comment=Merge audiobook MP3 files into one chaptered M4B for Apple Books
+Comment=Merge audiobook MP3 files into one chaptered audiobook (M4B, MP3, Opus or MKA)
 Exec=mp3tom4b-gui %F
 Icon=mp3tom4b
 Terminal=false

@@ -16,21 +16,19 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import mp3tom4b as engine  # noqa: E402
 
-from PySide6.QtCore import Qt, QThread, Signal, QSettings, QUrl, QSize  # noqa: E402
+from PySide6.QtCore import (Qt, QThread, Signal, QSettings, QUrl, QSize,  # noqa: E402
+                            QLoggingCategory)
 from PySide6.QtGui import (QPixmap, QDesktopServices, QKeySequence, QShortcut,  # noqa: E402
                            QPainter, QIcon, QAction)
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication, QMainWindow, QWidget, QTreeWidget, QTreeWidgetItem, QAbstractItemView,
     QPushButton, QLabel, QLineEdit, QPlainTextEdit, QComboBox, QCheckBox, QProgressBar,
     QFileDialog, QMessageBox, QHBoxLayout, QVBoxLayout, QFormLayout, QGroupBox, QSplitter,
-    QHeaderView, QStyle)
+    QHeaderView, QStyle, QSizePolicy)
 
 APP_NAME = "MP3 to M4B"
 CHAPTER_MODES = [("tag", "From MP3 titles"), ("filename", "From file names"),
                  ("number", "Chapter 1, 2, 3…")]
-BITRATES = [("32k", "32 kbps (smallest)"), ("48k", "48 kbps"),
-            ("64k", "64 kbps (good for speech)"), ("96k", "96 kbps"),
-            ("128k", "128 kbps (music-heavy books)")]
 COL_NUM, COL_CHAPTER, COL_FILE, COL_LEN = range(4)
 
 
@@ -228,10 +226,14 @@ class MainWindow(QMainWindow):
         self.summary.setStyleSheet("color: palette(placeholder-text);")
         hint = QLabel("Drag rows to reorder · double-click a chapter title to rename it")
         hint.setStyleSheet("color: palette(placeholder-text);")
+        hint.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        hint.setMinimumWidth(0)
+        hint.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)   # shrinks first
+        self.summary.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
         foot = QHBoxLayout()
         foot.addWidget(self.summary)
-        foot.addStretch()
-        foot.addWidget(hint)
+        foot.addSpacing(12)
+        foot.addWidget(hint, 1)
 
         left = QWidget()
         lv = QVBoxLayout(left)
@@ -275,10 +277,18 @@ class MainWindow(QMainWindow):
         fl.addRow("Genre", self.f_genre)
         fl.addRow("Description", self.f_desc)
 
+        self.o_format = QComboBox()
+        for key, F in engine.FORMATS.items():
+            self.o_format.addItem(F.label, key)
+        self.o_format_hint = QLabel()
+        self.o_format_hint.setWordWrap(True)
+        self.o_format_hint.setStyleSheet("color: palette(placeholder-text);")
+        self.o_format_hint.setMinimumHeight(self.o_format_hint.fontMetrics().lineSpacing() * 2 + 4)
+        self.o_format_hint.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.o_bitrate = QComboBox()
-        for val, label in BITRATES:
-            self.o_bitrate.addItem(label, val)
         self.o_mono = QCheckBox("Mono (smaller file, fine for speech)")
+        self.o_format.currentIndexChanged.connect(self._format_changed)
+        self.o_bitrate.currentIndexChanged.connect(self._quality_changed)
         self.o_chapters = QCheckBox("Create a chapter for each file")
         self.o_chapters.setChecked(True)
         self.o_names = QComboBox()
@@ -288,6 +298,8 @@ class MainWindow(QMainWindow):
         self.o_chapters.toggled.connect(self.o_names.setEnabled)
         opts = QGroupBox("Options")
         ol = QFormLayout(opts)
+        ol.addRow("Format", self.o_format)
+        ol.addRow(self.o_format_hint)
         ol.addRow("Quality", self.o_bitrate)
         ol.addRow("", self.o_mono)
         ol.addRow("", self.o_chapters)
@@ -368,14 +380,42 @@ class MainWindow(QMainWindow):
             self.restoreGeometry(geo)
         else:
             self.resize(1100, 720)
-        i = self.o_bitrate.findData(self.settings.value("bitrate", "64k"))
-        self.o_bitrate.setCurrentIndex(max(i, 0))
         self.o_mono.setChecked(self.settings.value("mono", False, type=bool))
+        i = self.o_format.findData(self.settings.value("format", "m4b"))
+        self.o_format.setCurrentIndex(max(i, 0))
+        self._format_changed()
 
     def _save_settings(self):
         self.settings.setValue("geometry", self.saveGeometry())
-        self.settings.setValue("bitrate", self.o_bitrate.currentData())
+        self.settings.setValue("format", self.fmt())
+        self.settings.setValue(f"quality/{self.fmt()}", self.o_bitrate.currentData())
         self.settings.setValue("mono", self.o_mono.isChecked())
+
+    # ---------------------------------------------------------------- format
+    def fmt(self):
+        return self.o_format.currentData() or "m4b"
+
+    def _format_changed(self, *_):
+        F = engine.FORMATS[self.fmt()]
+        self.o_format_hint.setText(F.hint)
+        want = self.settings.value(f"quality/{F.key}", F.default_quality)
+        self.o_bitrate.blockSignals(True)
+        self.o_bitrate.clear()
+        for val, label in F.qualities:
+            self.o_bitrate.addItem(label, val)
+        i = self.o_bitrate.findData(want)
+        self.o_bitrate.setCurrentIndex(i if i >= 0 else self.o_bitrate.findData(F.default_quality))
+        self.o_bitrate.blockSignals(False)
+        self._quality_changed()
+        if self.f_output.text().strip():
+            self.f_output.setText(engine.with_extension(self.f_output.text().strip(), F.key))
+        self.f_output.setPlaceholderText(f"Where to save the {F.ext} file")
+
+    def _quality_changed(self, *_):
+        copy = self.o_bitrate.currentData() == "copy"
+        self.o_mono.setEnabled(not copy)
+        self.o_mono.setToolTip("Mono needs re-encoding. Pick a bitrate to use it." if copy else "")
+        self.settings.setValue(f"quality/{self.fmt()}", self.o_bitrate.currentData())
 
     def last_dir(self):
         d = self.settings.value("last_dir", os.path.expanduser("~"))
@@ -403,15 +443,22 @@ class MainWindow(QMainWindow):
         tmpdir = self.tmpdir
 
         def work(job):
-            files = [f for f in engine.expand_paths(paths, recursive=True)
+            scanned = set()
+            files = [f for f in engine.expand_paths(paths, recursive=True, found_in_folder=scanned)
                      if engine.is_audio(f) and os.path.realpath(f) not in existing]
             tracks, errors = [], []
             for i, f in enumerate(files, 1):
                 job.progressed.emit(i / max(len(files), 1), f"Reading {i} of {len(files)}…")
                 try:
-                    tracks.append(engine.probe_track(f))
+                    t = engine.probe_track(f)
                 except engine.ConversionError as e:
                     errors.append(str(e))
+                    continue
+                if engine.looks_combined(t) and os.path.realpath(f) in scanned:
+                    note = engine.combined_note(t)
+                    errors.append(note[0].upper() + note[1:])
+                    continue
+                tracks.append(t)
             cover = None
             if want_cover and tracks:
                 cover = engine.find_folder_cover([t.path for t in tracks]) or \
@@ -535,16 +582,16 @@ class MainWindow(QMainWindow):
         if self.output_custom or self.list.topLevelItemCount() == 0:
             return
         folder = os.path.dirname(os.path.abspath(self.list.topLevelItem(0).data(0, Qt.UserRole).path))
-        self.f_output.setText(engine.default_output(self.f_title.text(), folder))
+        self.f_output.setText(engine.default_output(self.f_title.text(), folder, self.fmt()))
 
     def choose_output(self):
-        start = self.f_output.text() or engine.default_output(self.f_title.text(), self.last_dir())
+        F = engine.FORMATS[self.fmt()]
+        start = self.f_output.text() or engine.default_output(self.f_title.text(),
+                                                              self.last_dir(), F.key)
         f, _ = QFileDialog.getSaveFileName(self, "Save audiobook as", start,
-                                           "Audiobook (*.m4b)")
+                                           f"{F.label} (*{F.ext})")
         if f:
-            if not f.lower().endswith(".m4b"):
-                f += ".m4b"
-            self.f_output.setText(f)
+            self.f_output.setText(engine.with_extension(f, F.key))
             self.output_custom = True
 
     # ---------------------------------------------------------------- converting
@@ -562,9 +609,14 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, APP_NAME, "Give the book a title first.")
             self.f_title.setFocus()
             return
-        if not output.lower().endswith((".m4b", ".m4a", ".mp4")):
-            output += ".m4b"
+        if engine.with_extension(output, self.fmt()) != output:
+            output = engine.with_extension(output, self.fmt())
             self.f_output.setText(output)
+        if os.path.realpath(output) in {os.path.realpath(t.path) for t in tracks}:
+            QMessageBox.information(self, APP_NAME,
+                                    f"{os.path.basename(output)} is one of the files in the list. "
+                                    "Choose a different name to save the audiobook as.")
+            return
         overwrite = False
         if os.path.exists(output):
             r = QMessageBox.question(self, "Replace file?",
@@ -580,8 +632,11 @@ class MainWindow(QMainWindow):
                     narrator=self.f_narrator.text().strip(), year=self.f_year.text().strip(),
                     genre=self.f_genre.text().strip() or "Audiobook",
                     description=self.f_desc.toPlainText().strip(), cover=self.cover_path,
-                    chapters=self.o_chapters.isChecked(), bitrate=self.o_bitrate.currentData(),
-                    mono=self.o_mono.isChecked(), overwrite=overwrite)
+                    chapters=self.o_chapters.isChecked(), fmt=self.fmt(),
+                    quality=self.o_bitrate.currentData(),
+                    mono=self.o_mono.isChecked() and self.o_mono.isEnabled(),
+                    overwrite=overwrite)
+        verb = "Joining" if opts["quality"] == "copy" else "Encoding"
         total = sum(t.duration for t in tracks)
         self._save_settings()
 
@@ -590,15 +645,16 @@ class MainWindow(QMainWindow):
 
             def report(frac, done):
                 elapsed = time.monotonic() - started
-                msg = f"Encoding… {frac * 100:.0f}%  ({engine.fmt_time(done)} of {engine.fmt_time(total)})"
+                msg = f"{verb}… {frac * 100:.0f}%  ({engine.fmt_time(done)} of {engine.fmt_time(total)})"
                 if frac > 0.03 and elapsed > 3:
                     left = elapsed / frac - elapsed
                     msg += f" · about {self._human(left)} left"
                 job.progressed.emit(frac, msg)
 
-            out = engine.convert(tracks, output, progress=report,
+            notes = []
+            out = engine.convert(tracks, output, progress=report, notice=notes.append,
                                  should_cancel=lambda: job.cancel_requested, **opts)
-            return out, time.monotonic() - started
+            return out, time.monotonic() - started, notes
 
         self.status.setText("Starting…")
         self._start_job(work, self._converted, converting=True)
@@ -613,14 +669,15 @@ class MainWindow(QMainWindow):
         return f"{sec // 3600} hr {sec % 3600 // 60} min"
 
     def _converted(self, result):
-        out, took = result
+        out, took, notes = result
         size = os.path.getsize(out) / 1024 / 1024
         self.status.setText(f"Saved {os.path.basename(out)} ({size:.1f} MB) in {self._human(took)}.")
         self.progress.setValue(1000)
         box = QMessageBox(self)
         box.setWindowTitle("Done")
         box.setIcon(QMessageBox.Information)
-        box.setText(f"Your audiobook is ready.\n\n{out}\n{size:.1f} MB")
+        box.setText(f"Your audiobook is ready.\n\n{out}\n{size:.1f} MB"
+                    + "".join(f"\n\n{n}" for n in notes))
         show = box.addButton("Show in Folder", QMessageBox.ActionRole)
         box.addButton(QMessageBox.Ok)
         box.exec()
@@ -701,11 +758,26 @@ class MainWindow(QMainWindow):
         e.accept()
 
 
+def desktop_entry_installed(name="mp3tom4b.desktop"):
+    """True if install.sh has put our app-menu entry somewhere the desktop looks."""
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    data_dirs = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+    return any(os.path.isfile(os.path.join(d, "applications", name))
+               for d in [data_home] + data_dirs.split(":") if d)
+
+
 def main():
+    # Registering with the desktop portal is cosmetic (it only links the window to
+    # its app-menu entry). If the portal hasn't picked up the entry yet, Qt prints
+    # a scary-looking warning even though nothing is wrong, so hide that category.
+    QLoggingCategory.setFilterRules("qt.qpa.services.warning=false")
     app = QApplication(sys.argv)
     app.setApplicationName("mp3tom4b")
     app.setApplicationDisplayName(APP_NAME)
-    app.setDesktopFileName("mp3tom4b")
+    # Only tell the desktop which menu entry we are once that entry exists.
+    # Otherwise the desktop portal prints "App info not found for 'mp3tom4b'".
+    if desktop_entry_installed():
+        app.setDesktopFileName("mp3tom4b")
     win = MainWindow(initial_paths=[p for p in sys.argv[1:] if os.path.exists(p)])
     win.show()
     sys.exit(app.exec())
