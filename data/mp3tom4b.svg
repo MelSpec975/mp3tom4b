@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b4c7e"/>
+      <stop offset="1" stop-color="#1b2f50"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="116" height="116" rx="26" fill="url(#bg)"/>
+  <!-- open book -->
+  <path d="M64 44 C52 36 36 35 24 38 L24 90 C36 87 52 88 64 96 Z" fill="#f4efe6"/>
+  <path d="M64 44 C76 36 92 35 104 38 L104 90 C92 87 76 88 64 96 Z" fill="#e7dfd0"/>
+  <path d="M64 44 L64 96" stroke="#1b2f50" stroke-width="2"/>
+  <!-- sound waves on the right page -->
+  <g stroke="#e63946" stroke-width="5" stroke-linecap="round" fill="none">
+    <line x1="74" y1="62" x2="74" y2="74"/>
+    <line x1="82" y1="55" x2="82" y2="81"/>
+    <line x1="90" y1="60" x2="90" y2="76"/>
+    <line x1="97" y1="64" x2="97" y2="72"/>
+  </g>
+  <!-- lines of text on the left page -->
+  <g stroke="#9aa6b8" stroke-width="3" stroke-linecap="round">
+    <line x1="32" y1="52" x2="56" y2="54"/>
+    <line x1="32" y1="61" x2="56" y2="63"/>
+    <line x1="32" y1="70" x2="56" y2="72"/>
+    <line x1="32" y1="79" x2="50" y2="81"/>
+  </g>
+</svg>

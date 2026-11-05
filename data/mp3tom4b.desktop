@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=MP3 to M4B
+GenericName=Audiobook Converter
+Comment=Merge audiobook MP3 files into one chaptered M4B for Apple Books
+Exec=mp3tom4b-gui %F
+Icon=mp3tom4b
+Terminal=false
+Categories=AudioVideo;Audio;Utility;
+Keywords=audiobook;m4b;mp3;convert;chapters;apple;books;
+MimeType=audio/mpeg;inode/directory;
+StartupWMClass=mp3tom4b
